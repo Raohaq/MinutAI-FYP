@@ -1,0 +1,17 @@
+MinutAI Quick Run Guide (Markers)
+
+1) Start Ollama
+   - ollama pull qwen2.5:3b-instruct
+   - ollama serve
+
+2) Confirm ffmpeg + ffprobe installed
+   - ffmpeg -version
+   - ffprobe -version
+
+3) Run web app
+   cd MinutAI.web\MinutAI.web
+   dotnet run
+   Open the printed URL (e.g., http://localhost:5101)
+
+4) Register -> Login -> Upload audio -> tick consent -> process
+5) Results -> Downloads -> History -> Delete

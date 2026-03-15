@@ -47,6 +47,7 @@ namespace MinutAI.web.Pages.Account
             var exists = await _db.Users.AnyAsync(u => u.Email == Email);
             if (exists)
             {
+
                 ErrorMessage = "This email is already registered.";
                 return Page();
             }
