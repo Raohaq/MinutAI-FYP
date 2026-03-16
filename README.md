@@ -44,6 +44,12 @@ Open PowerShell:
 
 ```powershell
 cd "backend"
+
 python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+
+# Install dependencies USING the venv python (no activation needed)
+.\venv\Scripts\python.exe -m pip install --upgrade pip
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# Quick check
+.\venv\Scripts\python.exe -c "import faster_whisper; print('faster-whisper OK')"
