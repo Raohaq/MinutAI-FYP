@@ -31,7 +31,7 @@ namespace MinutAI.web.Pages.Meetings
             return Page();
         }
 
-        // Download handler: /Meetings/Result?id=1&handler=Download&type=summary
+         //Download handler
         public IActionResult OnGetDownload(int id, string type)
         {
             var userEmail = User.Identity?.Name ?? "";
@@ -68,7 +68,7 @@ namespace MinutAI.web.Pages.Meetings
             return File(bytes, "text/plain", fileName);
         }
 
-        // Download all as ZIP: /Meetings/Result?id=1&handler=DownloadAll
+        //Download all as ZIP
         public IActionResult OnGetDownloadAll(int id)
         {
             var userEmail = User.Identity?.Name ?? "";

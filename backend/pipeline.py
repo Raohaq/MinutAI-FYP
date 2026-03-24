@@ -11,28 +11,26 @@ from urllib import request, error
 
 from faster_whisper import WhisperModel
 
-# ===========================
-# CONFIG (speed + stability)
-# ===========================
+
+# Main configuration for transcription and summarisation
 DEVICE = "cpu"
 WHISPER_SIZE = os.environ.get("MINUTAI_WHISPER", "base")
 WHISPER_COMPUTE = os.environ.get("MINUTAI_WHISPER_COMPUTE", "int8")
 
 OLLAMA_URL = os.environ.get("MINUTAI_OLLAMA_URL", "http://localhost:11434/api/generate")
-# Default to faster model; can override with env var.
 OLLAMA_MODEL = os.environ.get("MINUTAI_OLLAMA_MODEL", "qwen2.5:3b-instruct")
 
-# If transcript is short, do ONE Ollama call only
+# If transcript is short, summarise in one call
 ONE_SHOT_MAX_CHARS = int(os.environ.get("MINUTAI_ONE_SHOT_MAX_CHARS", "9000"))
 
-# Chunking for long meetings (bigger chunks -> fewer calls)
+# Settings for chunking long transcripts
 CHUNK_MAX_CHARS = int(os.environ.get("MINUTAI_CHUNK_MAX_CHARS", "5500"))
 REDUCE_MAX_CHARS = int(os.environ.get("MINUTAI_REDUCE_MAX_CHARS", "14000"))
 
 MAX_ACTION_ITEMS = int(os.environ.get("MINUTAI_MAX_ACTION_ITEMS", "12"))
 MAX_TASK_LEN = int(os.environ.get("MINUTAI_MAX_TASK_LEN", "160"))
 
-# Lower tokens -> faster
+# Token limits for LLM responses
 MAP_MAX_TOKENS = int(os.environ.get("MINUTAI_MAP_MAX_TOKENS", "180"))
 REDUCE_MAX_TOKENS = int(os.environ.get("MINUTAI_REDUCE_MAX_TOKENS", "260"))
 ONE_SHOT_MAX_TOKENS = int(os.environ.get("MINUTAI_ONE_SHOT_MAX_TOKENS", "280"))
@@ -45,21 +43,17 @@ OLLAMA_TEMP = float(os.environ.get("MINUTAI_OLLAMA_TEMP", "0.2"))
 CALL_PAUSE_SEC = float(os.environ.get("MINUTAI_CALL_PAUSE_SEC", "0.01"))
 
 
-# ===========================
-# LOAD MODELS ONCE
-# ===========================
+# Load Whisper model once when script starts
 WHISPER_MODEL = WhisperModel(WHISPER_SIZE, device=DEVICE, compute_type=WHISPER_COMPUTE)
 
 
-# ===========================
-# AUDIO HELPERS
-# ===========================
+# Create folder if it does not exist
 def ensure_dir(path: str):
     os.makedirs(path, exist_ok=True)
 
 
+# Convert input audio into a clean 16kHz mono WAV file for Whisper
 def to_wav_16k_mono(input_audio: str) -> str:
-    """Convert audio to 16kHz mono wav (temp file)."""
     wav_path = os.path.join(
         tempfile.gettempdir(),
         f"minutai_{int(datetime.utcnow().timestamp())}_{os.getpid()}.wav"
@@ -73,19 +67,19 @@ def to_wav_16k_mono(input_audio: str) -> str:
     return wav_path
 
 
+# Convert time in seconds into mm:ss format
 def format_ts(seconds: float) -> str:
     m = int(seconds // 60)
     s = int(seconds % 60)
     return f"{m:02d}:{s:02d}"
 
 
-# ===========================
-# TEXT HELPERS
-# ===========================
+# Remove extra spaces from text
 def clean_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+# Replace harmful phrases with a safer placeholder in saved outputs
 def remove_problem_content_for_outputs(text: str) -> str:
     patterns = [
         r"\bkill myself\b",
@@ -104,6 +98,7 @@ def remove_problem_content_for_outputs(text: str) -> str:
     return out
 
 
+# Split long transcript into smaller chunks
 def split_into_chunks(text: str, max_chars: int) -> List[str]:
     text = text.strip()
     if len(text) <= max_chars:
@@ -125,6 +120,7 @@ def split_into_chunks(text: str, max_chars: int) -> List[str]:
     return chunks
 
 
+# Clean task text by removing bullets, numbering, and extra spaces
 def normalize_task_line(line: str) -> str:
     line = line.strip()
     line = re.sub(r"^[-•\d\.\)\s]+", "", line).strip()
@@ -133,6 +129,7 @@ def normalize_task_line(line: str) -> str:
     return line
 
 
+# Check if a detected task looks invalid or unrelated
 def looks_like_nontask(task: str) -> bool:
     low = task.lower().strip()
     if len(low) < 6:
@@ -146,6 +143,7 @@ def looks_like_nontask(task: str) -> bool:
     return False
 
 
+# Remove duplicate tasks
 def dedupe_tasks(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     seen = set()
     out: List[Dict[str, Any]] = []
@@ -160,6 +158,7 @@ def dedupe_tasks(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return out
 
 
+# Remove repeated sentences in summary text
 def dedupe_sentences(text: str) -> str:
     text = text.strip()
     if not text:
@@ -178,9 +177,7 @@ def dedupe_sentences(text: str) -> str:
     return " ".join(uniq).strip()
 
 
-# ===========================
-# DUE DATE HANDLING (prevents fake ISO 2023-01-06)
-# ===========================
+# Try to find a spoken due-date range in transcript
 def extract_due_phrase(transcript: str) -> Optional[str]:
     m = re.search(
         r"\bfrom\s+((jan(?:uary)?)\s+\d{1,2}(st|nd|rd|th)?)\s+to\s+((jan(?:uary)?)\s+\d{1,2}(st|nd|rd|th)?)\b",
@@ -201,10 +198,12 @@ def extract_due_phrase(transcript: str) -> Optional[str]:
     return None
 
 
+# Check if string is in YYYY-MM-DD format
 def is_iso_date(s: str) -> bool:
     return bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", s.strip()))
 
 
+# Filter out vague or made-up action items
 def is_generic_invented_task(task: str) -> bool:
     low = task.lower()
     bad_phrases = [
@@ -215,9 +214,7 @@ def is_generic_invented_task(task: str) -> bool:
     return any(p in low for p in bad_phrases)
 
 
-# ===========================
-# TRANSCRIPTION
-# ===========================
+# Transcribe audio using Faster Whisper and keep timestamps
 def transcribe_with_faster_whisper_timestamped(audio_path: str) -> Tuple[str, str]:
     segments, _info = WHISPER_MODEL.transcribe(
         audio_path,
@@ -241,9 +238,7 @@ def transcribe_with_faster_whisper_timestamped(audio_path: str) -> Tuple[str, st
     return timestamped, plain
 
 
-# ===========================
-# OLLAMA CLIENT + WARMUP
-# ===========================
+# Send prompt to Ollama and return generated response
 def ollama_generate(prompt: str, max_tokens: int, temperature: float = OLLAMA_TEMP) -> str:
     payload = {
         "model": OLLAMA_MODEL,
@@ -269,14 +264,15 @@ def ollama_generate(prompt: str, max_tokens: int, temperature: float = OLLAMA_TE
         raise RuntimeError(f"Ollama call failed: {e}") from e
 
 
+# Small warmup request to reduce delay on first actual Ollama call
 def ollama_warmup():
-    # Keeps first real call faster; safe to ignore failures.
     try:
         _ = ollama_generate("Reply with OK.", max_tokens=3, temperature=0.0)
     except Exception:
         pass
 
 
+# Try to extract a JSON object from Ollama output
 def extract_json_object(text: str) -> Optional[Dict[str, Any]]:
     text = text.strip()
     try:
@@ -295,9 +291,7 @@ def extract_json_object(text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-# ===========================
-# ONE-SHOT (fast path)
-# ===========================
+# One-call summary and action extraction for short transcripts
 def one_shot_summary_actions(transcript: str) -> Dict[str, Any]:
     prompt = f"""
 Return ONLY valid JSON:
@@ -330,9 +324,7 @@ Transcript:
     return obj
 
 
-# ===========================
-# MAP-REDUCE (long meetings)
-# ===========================
+# Summarise one transcript chunk and extract chunk-level tasks
 def map_chunk_to_json(chunk_text: str) -> Dict[str, Any]:
     prompt = f"""
 Return ONLY valid JSON:
@@ -362,6 +354,7 @@ Chunk:
     return {"chunk_summary": cs.strip(), "action_items": ai}
 
 
+# Combine chunk summaries into one final summary and task list
 def reduce_to_final_json(chunk_summaries: List[str], all_action_items: List[Dict[str, Any]]) -> Dict[str, Any]:
     combined_summaries = "\n".join(f"- {s}" for s in chunk_summaries if s.strip())
     if len(combined_summaries) > REDUCE_MAX_CHARS:
@@ -403,9 +396,7 @@ Candidate tasks:
     return {"summary": summary.strip(), "action_items": action_items}
 
 
-# ===========================
-# CLEAN ACTION ITEMS (remove hallucinations + ISO dates)
-# ===========================
+# Clean and validate action items before saving
 def clean_action_items(items: List[Dict[str, Any]], transcript: str) -> List[Dict[str, Any]]:
     due_phrase = extract_due_phrase(transcript)
 
@@ -437,7 +428,6 @@ def clean_action_items(items: List[Dict[str, Any]], transcript: str) -> List[Dic
             elif is_iso_date(due):
                 due = None
             elif due.lower() not in transcript.lower():
-                # enforce "copy as spoken"
                 due = None
         else:
             due = None
@@ -446,7 +436,7 @@ def clean_action_items(items: List[Dict[str, Any]], transcript: str) -> List[Dic
 
     cleaned = dedupe_tasks(cleaned)
 
-    # If meeting clearly contains a due range and tasks have no due, attach it
+    # If transcript has a date range and no task has a due date, reuse that phrase
     if due_phrase:
         any_due = any(x.get("due") for x in cleaned)
         if not any_due:
@@ -456,9 +446,7 @@ def clean_action_items(items: List[Dict[str, Any]], transcript: str) -> List[Dic
     return cleaned[:MAX_ACTION_ITEMS]
 
 
-# ===========================
-# ORCHESTRATION
-# ===========================
+# Main summary + action extraction flow
 def summarize_and_extract_actions(clean_transcript: str) -> Tuple[str, List[Dict[str, Any]]]:
     safe = remove_problem_content_for_outputs(clean_transcript)
     if not safe:
@@ -466,7 +454,7 @@ def summarize_and_extract_actions(clean_transcript: str) -> Tuple[str, List[Dict
 
     ollama_warmup()
 
-    # One-shot (fast) for short transcripts
+    # Use one-shot approach for shorter transcripts
     if len(safe) <= ONE_SHOT_MAX_CHARS:
         obj = one_shot_summary_actions(safe)
         summary = obj.get("summary", "") if isinstance(obj.get("summary"), str) else ""
@@ -474,7 +462,7 @@ def summarize_and_extract_actions(clean_transcript: str) -> Tuple[str, List[Dict
         summary = dedupe_sentences(summary)
         return summary.strip(), clean_action_items(actions, safe)
 
-    # Chunked for long transcripts
+    # Use chunk-based summarisation for longer transcripts
     chunks = split_into_chunks(safe, CHUNK_MAX_CHARS)
 
     chunk_summaries: List[str] = []
@@ -504,9 +492,7 @@ def summarize_and_extract_actions(clean_transcript: str) -> Tuple[str, List[Dict
     return summary.strip(), clean_action_items(actions, safe)
 
 
-# ===========================
-# FALLBACK (if Ollama fails)
-# ===========================
+# Backup regex-based action extractor if Ollama fails
 def fallback_actions(clean_transcript: str) -> List[Dict[str, Any]]:
     safe = remove_problem_content_for_outputs(clean_transcript)
     patterns = [
@@ -533,16 +519,15 @@ def fallback_actions(clean_transcript: str) -> List[Dict[str, Any]]:
     return out[:MAX_ACTION_ITEMS]
 
 
-# ===========================
-# MAIN
-# ===========================
+# Main function of the pipeline
 def main():
     if len(sys.argv) < 2:
         raise ValueError("Usage: python pipeline.py <audio_path>")
 
     audio_path = sys.argv[1]
 
-    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # project root
+    # Project root folder
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     output_dir = os.path.join(BASE_DIR, "outputs")
     ensure_dir(output_dir)
 
@@ -554,9 +539,10 @@ def main():
 
     wav_path = None
     try:
+        # Convert audio before transcription
         wav_path = to_wav_16k_mono(audio_path)
 
-        # 1) Transcript
+        # Step 1: transcription
         timestamped, clean = transcribe_with_faster_whisper_timestamped(wav_path)
         with open(transcript_path, "w", encoding="utf-8") as f:
             f.write(timestamped)
@@ -564,7 +550,7 @@ def main():
         with open(clean_path, "w", encoding="utf-8") as f:
             f.write(clean)
 
-        # 2) Summary + action items
+        # Step 2: summary and action items
         try:
             summary, actions = summarize_and_extract_actions(clean)
         except Exception:
@@ -597,6 +583,7 @@ def main():
         print("Pipeline completed successfully.")
 
     finally:
+        # Delete temporary WAV file after processing
         if wav_path and os.path.exists(wav_path):
             try:
                 os.remove(wav_path)

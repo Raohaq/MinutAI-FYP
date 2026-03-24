@@ -1,40 +1,4 @@
-﻿@* @page *@
-@* @model IndexModel *@
-@* @{ *@
-@*     ViewData["Title"] = "MinutAI"; *@
-@* } *@
-
-@* <h1>MinutAI – Upload Meeting Audio</h1> *@
-
-@* <div style="max-width:900px; margin:auto;"> *@
-@*     <form method="post" enctype="multipart/form-data"> *@
-@*         <input type="file" name="AudioFile" required /> *@
-@*         <br /><br /> *@
-
-@*         <label> *@
-@*             <input type="checkbox" name="ConsentConfirmed" value="true" /> *@
-@*             I confirm this meeting was recorded with consent. *@
-@*         </label> *@
-
-@*         <br /><br /> *@
-
-@*         <div id="loading" style="display:none; margin-top:10px;"> *@
-@*             <b>Processing... please wait.</b> *@
-@*         </div> *@
-
-@*         <button type="submit" onclick="document.getElementById('loading').style.display='block';"> *@
-@*             Upload & Process *@
-@*         </button> *@
-@*     </form> *@
-@* </div> *@
-
-@* @if (Model.StatusMessage != null) *@
-@* { *@
-@* <p><b>@Model.StatusMessage</b></p> *@
-@* } *@
-
-
-@page
+﻿@page
 @model IndexModel
 @{
     ViewData["Title"] = "Upload";
@@ -42,7 +6,7 @@
 
 <div class="page-wrap">
 
-    <!-- HERO -->
+    @* HERO *@
     <div class="text-center my-5">
         <h1 class="hero-title mb-2">Upload Meeting Audio</h1>
 
@@ -52,7 +16,7 @@
         </p>
     </div>
 
-    <!-- MAIN CARD -->
+    @* MAIN CARD *@
     <div class="card-soft p-5" style="max-width:1200px; margin:0 auto;">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div class="fw-semibold">
@@ -62,7 +26,8 @@
         </div>
 
         <form method="post" enctype="multipart/form-data" onsubmit="return startLoading();">
-            <!-- Upload -->
+
+            @* Upload *@
             <div class="mb-3">
                 <input class="form-control" type="file" name="AudioFile" required />
             </div>
@@ -80,13 +45,13 @@
                 </small>
             </div>
 
-            <!-- Loading -->
+            @* Loading *@
             <div id="loading" class="alert alert-info py-2 mb-3" style="display:none;">
                 <i class="bi bi-hourglass-split me-1"></i>
                 Processing... please wait (long meetings may take a few minutes).
             </div>
 
-            <!-- CTA BUTTON -->
+            @* CTA BUTTON *@
             <div class="d-grid">
                 <button id="processBtn" type="submit" class="btn btn-brand btn-lg">
                     <i class="bi bi-play-circle me-2"></i> Upload & Process
@@ -122,7 +87,7 @@
                 btn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i> Processing...';
             }
 
-            return true; // allow form submit
+            return true; 
         }
     </script>
 }

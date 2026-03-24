@@ -12,7 +12,7 @@ var conn = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(conn));
 
-// Cookie Authentication (your custom pages in /Pages/Account)
+// Cookie Authentication
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = "Cookies";
@@ -26,10 +26,10 @@ builder.Services.AddAuthentication(options =>
     options.AccessDeniedPath = "/Account/Login";
 });
 
-// Authorization (needed because you use [Authorize])
+// Authorization 
 builder.Services.AddAuthorization();
 
-// Upload limits (for large audio files)
+// Upload limits 
 builder.Services.Configure<FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit = 300 * 1024 * 1024; // 300MB

@@ -52,7 +52,7 @@ namespace MinutAI.web.Pages.Account
                 return Page();
             }
 
-            // Create user + hash password with BCrypt (no Identity)
+            // Create user 
             var user = new AppUser
             {
                 FullName = FullName,

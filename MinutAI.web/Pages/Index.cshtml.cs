@@ -59,7 +59,6 @@ namespace MinutAI.web.Pages
                 if (!System.IO.File.Exists(pythonExe))
                     throw new FileNotFoundException($"Python venv not found at: {pythonExe}");
 
-                // Save upload to TEMP (avoid keeping duplicates in your project folders)
                 var ext = Path.GetExtension(AudioFile.FileName);
                 if (string.IsNullOrWhiteSpace(ext)) ext = ".m4a";
 
@@ -71,11 +70,11 @@ namespace MinutAI.web.Pages
                     await AudioFile.CopyToAsync(stream);
                 }
 
-                // Enforce 90-minute max duration
+                // 120-minute max duration
                 var durationSeconds = await GetAudioDurationSecondsAsync(tempAudioPath);
-                if (durationSeconds > 90 * 60)
+                if (durationSeconds > 120 * 60)
                 {
-                    StatusMessage = $"Audio is too long ({Math.Round(durationSeconds / 60, 1)} minutes). Max allowed is 90 minutes.";
+                    StatusMessage = $"Audio is too long ({Math.Round(durationSeconds / 60, 1)} minutes). Max allowed is 120 minutes.";
                     return Page();
                 }
 
@@ -96,10 +95,10 @@ namespace MinutAI.web.Pages
                 var summary = System.IO.File.Exists(summaryPath) ? System.IO.File.ReadAllText(summaryPath) : "";
                 var actions = System.IO.File.Exists(actionsPath) ? System.IO.File.ReadAllText(actionsPath) : "";
 
-                // Save to DB + redirect to results page
+                // Save to DB
                 var userEmail = User.Identity?.Name ?? "unknown";
 
-                // Store original filename for history display (audio is NOT stored on disk)
+                // Store original filename for history display
                 var record = new MeetingRecord
                 {
                     UserEmail = userEmail,
@@ -121,7 +120,7 @@ namespace MinutAI.web.Pages
             }
             finally
             {
-                // Always delete temp upload so we don't keep duplicates
+                // Delete temp upload so we don't keep duplicates
                 if (!string.IsNullOrWhiteSpace(tempAudioPath) && System.IO.File.Exists(tempAudioPath))
                 {
                     try { System.IO.File.Delete(tempAudioPath); } catch { }
@@ -147,7 +146,7 @@ namespace MinutAI.web.Pages
 
         private async Task<double> GetAudioDurationSecondsAsync(string filePath)
         {
-            // Requires ffprobe in PATH (usually comes with ffmpeg)
+            // ffprobe in PATH (comes with ffmpeg)
             var psi = new ProcessStartInfo
             {
                 FileName = "ffprobe",
